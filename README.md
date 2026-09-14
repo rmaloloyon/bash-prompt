@@ -1,96 +1,111 @@
-# Nice & Beautiful Bash Prompt with Git Branch
+# Nice & Beautiful Bash Prompt
 
-A colorful, informative Bash prompt (`PS1`) that shows your **username**, **hostname**, **current directory**, **Git branch with dirty-state markers**, and a **red exit-code indicator** when the last command failed.
+A stylized, multi-segment Bash prompt built for WSL, with colored "pill" containers for username, directory, file/folder counts, and the current Git branch (color-coded by dirty state).
 
 ## Preview
 
 ```
-username@hostname:~/projects/my-repo (main*)
-❯
+╭─ 🐧 you  ~/projects/my-repo  ▰ 3 ≡ 12 🔗 0 ⎇  main
+╰ $
 ```
 
-- 🟢 Green username
-- 🔵 Blue hostname
-- 🟡 Yellow working directory
-- 🟣 Magenta Git branch, with status markers:
-  - `*` unstaged changes
-  - `+` staged changes
-  - `?` untracked files
-- 🔴 Red `✗` prefix — shown only when the previous command exited with an error
-- Two-line layout so long paths never crowd your typing area
+- Magenta **username** pill with a penguin icon (WSL/Linux indicator)
+- Blue **directory** pill showing the current working directory
+- Cyan **file-stats** pill showing folder count (▰), file count (≡), and symlink count (🔗)
+- **Git branch** pill (⎇) that only appears inside a Git repo — background/foreground turn **yellow** when the repo is dirty, **green** when clean
+- Two-line layout with a rounded arrow (`╭─` / `╰`) leading into the prompt
 
 ## Installation
 
-1. Open your shell config file:
+1. Open your WSL shell config:
    ```bash
-   nano ~/.bashrc      # Linux
-   nano ~/.bash_profile # macOS (if not using .bashrc)
+   nano ~/.bashrc
    ```
 
-2. Paste in the script below (or see [`bash_prompt.sh`](#full-script) for the raw file).
+2. Paste in the script below.
 
 3. Reload your shell:
    ```bash
    source ~/.bashrc
    ```
 
+> **Note:** This prompt uses emoji and box-drawing characters (`╭`, `╰`, `▰`, `≡`, `⎇`), so it needs a terminal font with good Unicode/emoji coverage (e.g. a [Nerd Font](https://www.nerdfonts.com/) or Windows Terminal's default Cascadia Code with emoji fallback).
+
 ## Full Script
 
 ```bash
-# ~/.bashrc
+# ==============================================
+# Nice and Beautiful WSL Bash Prompt
+# ==============================================
 
-# Colors
-RESET="\[\033[0m\]"
-BOLD="\[\033[1m\]"
-GREEN="\[\033[32m\]"
-BLUE="\[\033[34m\]"
-YELLOW="\[\033[33m\]"
-RED="\[\033[31m\]"
-CYAN="\[\033[36m\]"
-MAGENTA="\[\033[35m\]"
+# Prompt
+FMT_BOLD="\[\e[1m\]"
+FMT_DIM="\[\e[2m\]"
+FMT_RESET="\[\e[0m\]"
+FMT_UNBOLD="\[\e[22m\]"
+FMT_UNDIM="\[\e[22m\]"
+FG_BLACK="\[\e[30m\]"
+FG_BLUE="\[\e[34m\]"
+FG_CYAN="\[\e[36m\]"
+FG_GREEN="\[\e[32m\]"
+FG_GREY="\[\e[37m\]"
+FG_MAGENTA="\[\e[35m\]"
+FG_RED="\[\e[31m\]"
+FG_WHITE="\[\e[97m\]"
+BG_BLACK="\[\e[40m\]"
+BG_BLUE="\[\e[44m\]"
+BG_CYAN="\[\e[46m\]"
+BG_GREEN="\[\e[42m\]"
+BG_MAGENTA="\[\e[45m\]"
+BG_RED="\[\e[41m\]"
 
-# Git branch + dirty state function
-parse_git_branch() {
-    local branch
-    branch=$(git symbolic-ref --short HEAD 2>/dev/null) || return
-    local status=""
-    if ! git diff --quiet 2>/dev/null; then
-        status="${status}*"   # unstaged changes
-    fi
-    if ! git diff --cached --quiet 2>/dev/null; then
-        status="${status}+"  # staged changes
-    fi
-    if [ -n "$(git status --porcelain 2>/dev/null | grep '^??')" ]; then
-        status="${status}?"  # untracked files
-    fi
-    echo " (${branch}${status})"
+parse_git_bg() {
+        [[ $(git status -s 2> /dev/null) ]] && echo -e "\e[43m" || echo -e "\e[42m"
 }
 
-# Exit code indicator
-exit_code_prompt() {
-    local exit_code=$?
-    if [ $exit_code -ne 0 ]; then
-        echo "${RED}✗${RESET} "
-    fi
+parse_git_fg() {
+        [[ $(git status -s 2> /dev/null) ]] && echo -e "\e[33m" || echo -e "\e[32m"
 }
 
-# Build the prompt
-PS1="${CYAN}\$(exit_code_prompt)${GREEN}\u${RESET}@${BLUE}\h${RESET}:${YELLOW}\w${RESET}${MAGENTA}\$(parse_git_branch)${RESET}\n${BOLD}❯${RESET} "
+PS1="\n${FG_BLUE}╭─" # begin arrow to prompt
+PS1+="${FG_MAGENTA}" # begin USERNAME container
+PS1+="${BG_MAGENTA}${FG_CYAN}${FMT_BOLD} 🐧 " # print OS icon
+PS1+="${FG_WHITE}\u" # print username
+PS1+="${FMT_UNBOLD} ${FG_MAGENTA}${BG_BLUE} " # end USERNAME container / begin DIRECTORY container
+PS1+="${FG_GREY}\w " # print directory
+PS1+="${FG_BLUE}${BG_CYAN} " # end DIRECTORY container / begin FILES container
+PS1+="${FG_BLACK}"
+PS1+="▰ \$(find . -mindepth 1 -maxdepth 1 -type d | wc -l) " # print number of folders
+PS1+="≡ \$(find . -mindepth 1 -maxdepth 1 -type f | wc -l) " # print number of files
+PS1+="🔗 \$(find . -mindepth 1 -maxdepth 1 -type l | wc -l) " # print number of symlinks
+PS1+="${FMT_RESET}${FG_CYAN}"
+PS1+="\$(git branch 2> /dev/null | grep '^*' | colrm 1 2 | xargs -I BRANCH echo -n \"" # check if git branch exists
+PS1+="\$(parse_git_bg) " # end FILES container / begin BRANCH container
+PS1+="${FG_BLACK}⎇  BRANCH " # print current git branch
+PS1+="${FMT_RESET}\$(parse_git_fg)\")\n" # end last container (either FILES or BRANCH)
+PS1+="${FG_BLUE}╰ " # end arrow to prompt
+PS1+="${FG_CYAN}\\$ " # print prompt
+PS1+="${FMT_RESET}"
+export PS1
 ```
 
 ## How It Works
 
 | Piece | Purpose |
 |---|---|
-| `parse_git_branch()` | Detects if you're inside a Git repo, prints the branch name plus `*`/`+`/`?` markers for unstaged, staged, and untracked changes. |
-| `exit_code_prompt()` | Captures `$?` from the previous command and prints a red `✗` if it failed. **Must run first** in `PS1`, before any other command executes and overwrites `$?`. |
-| `\[...\]` | Wraps non-printing ANSI escape sequences so Bash correctly counts visible characters — prevents line-wrapping and reverse-search glitches. |
-| `PS1` | Assembles everything into the final prompt string, shown on a new line below your path for a clean typing area. |
+| `FMT_*` / `FG_*` / `BG_*` variables | Named ANSI escape codes for text formatting, foreground colors, and background colors, wrapped in `\[...\]` so Bash doesn't miscount non-printing characters. |
+| `parse_git_bg()` / `parse_git_fg()` | Check `git status -s` — if there are any pending changes, return yellow (background `\e[43m` / foreground `\e[33m`); if clean, return green (`\e[42m` / `\e[32m`). |
+| Username segment | Penguin emoji + `\u` (current user) on a magenta pill. |
+| Directory segment | `\w` (current working directory) on a blue pill. |
+| Files segment | Uses `find` with `-maxdepth 1` to count subdirectories, files, and symlinks in the current directory, shown on a cyan pill. |
+| Git branch segment | `git branch | grep '^*'` extracts the active branch name; `colrm 1 2` strips the leading `* ` marker. The whole block is wrapped in a conditional so it **only renders inside a Git repo** — outside one, `git branch` returns nothing and the segment collapses. |
+| `╭─` / `╰` | Rounded corner characters that visually frame the two-line prompt. |
 
 ## Notes
 
-- This is a **Bash-only** solution (relies on `PS1` syntax specific to Bash). For Zsh (macOS default shell), the equivalent uses `PROMPT`/`%F{color}` syntax instead — ask if you'd like that version.
-- Want ahead/behind tracking (`↑2 ↓1`) vs. the remote branch, or a two-tone Powerline style with separators? Both are easy extensions to `parse_git_branch()`.
+- **Performance:** The `find` commands re-scan the current directory on every prompt render. In directories with very large file counts, this can make the prompt feel sluggish — if that happens, add `-not -path '*/.*'` or cap depth further, or drop the file-stats segment.
+- **WSL-specific styling:** The penguin icon (🐧) is a nod to running Linux inside WSL — feel free to swap it for `` (Nerd Font Linux glyph) or drop it if not on WSL.
+- This is a heavier, more "themed" alternative to a minimal prompt — see the companion [minimal Bash + Git prompt](#) if you'd prefer something simpler and lighter-weight.
 
 ## License
 
